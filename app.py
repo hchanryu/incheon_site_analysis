@@ -1,6 +1,7 @@
 """인천 입지 분석 — 업종과 전략을 정하면 후보 격자를 점수로 줄 세운다."""
 
-import matplotlib
+from bisect import bisect_right
+
 import numpy as np
 import pandas as pd
 import pydeck as pdk
@@ -13,7 +14,26 @@ from scoring import (
 
 st.set_page_config(page_title="인천 입지 분석", layout="wide")
 
-CMAP = matplotlib.colormaps.get_cmap("YlOrRd")
+# ColorBrewer YlOrRd 9단계. 색상표 하나 때문에 matplotlib을 끌어오지 않는다.
+RAMP = [
+    (255, 255, 204), (255, 237, 160), (254, 217, 118),
+    (254, 178, 76), (253, 141, 60), (252, 78, 42),
+    (227, 26, 28), (189, 0, 38), (128, 0, 38),
+]
+_STOPS = [i / (len(RAMP) - 1) for i in range(len(RAMP))]
+
+
+def ramp_color(t: float):
+    """0~1 값을 YlOrRd 색으로 선형 보간한다."""
+    t = min(max(float(t), 0.0), 1.0)
+    i = min(bisect_right(_STOPS, t) - 1, len(RAMP) - 2)
+    i = max(i, 0)
+    span = _STOPS[i + 1] - _STOPS[i]
+    f = 0.0 if span == 0 else (t - _STOPS[i]) / span
+    lo, hi = RAMP[i], RAMP[i + 1]
+    return [int(round(lo[c] + (hi[c] - lo[c]) * f)) for c in range(3)]
+
+
 INCHEON_CENTER = (37.45, 126.70)
 
 
@@ -42,8 +62,7 @@ def score_colors(geojson: dict, score_by_grid: dict, dim: bool):
             feat["properties"]["fill"] = [200, 205, 210, 40 if dim else 90]
             feat["properties"]["score_txt"] = "대상 아님"
         else:
-            r, g, b, _ = CMAP(min(max(s / 100.0, 0.0), 1.0))
-            feat["properties"]["fill"] = [int(r * 255), int(g * 255), int(b * 255), 205]
+            feat["properties"]["fill"] = ramp_color(s / 100.0) + [205]
             feat["properties"]["score_txt"] = f"{s:.1f}점"
     return geojson
 
